@@ -209,7 +209,7 @@ def founder_daily_brief() -> Workflow:
         http(
             "Get company snapshot",
             "GET",
-            "https://founder-command-center-jet.vercel.app/api/snapshot",
+            "https://founder-command-center-demo.vercel.app/api/snapshot",
             notes="Any JSON source works here: Notion queries, Linear, a Google Sheet.",
         ),
         after="Config",

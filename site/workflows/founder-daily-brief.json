@@ -37,7 +37,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://founder-command-center-jet.vercel.app/api/snapshot",
+        "url": "https://founder-command-center-demo.vercel.app/api/snapshot",
         "options": {}
       },
       "id": "8852fefd-04f2-5487-9d21-40d7443766a5",
