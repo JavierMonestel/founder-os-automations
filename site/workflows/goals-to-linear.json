@@ -1,0 +1,224 @@
+{
+  "name": "Monthly goals → Linear plan (Notion → OKR planner → Slack review)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 1-7 * 1"
+            }
+          ]
+        }
+      },
+      "id": "5e806750-5dca-5f19-b6ae-7b8d4c6c7fb9",
+      "name": "1st Monday 9:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Edit these once after importing. IDs come from your own workspace.\nreturn [{ json: {\n  slackChannel: 'C0123456789',          // e.g. #founder-ops\n  founderSlackId: 'U0123456789',        // DM target for the brief\n  linearTeamId: 'YOUR-LINEAR-TEAM-ID',\n  notion: {\n    followUps: 'FOLLOW-UPS-DATA-SOURCE-ID',\n    meetings: 'MEETINGS-DATA-SOURCE-ID',\n    keyResults: 'KEY-RESULTS-DATA-SOURCE-ID',\n    decisions: 'DECISIONS-DATA-SOURCE-ID',\n    objectives: 'OBJECTIVES-DATA-SOURCE-ID',\n    tripsParentPage: 'TRAVEL-PAGE-ID',\n    investorUpdatesPage: 'INVESTOR-UPDATES-PAGE-ID',\n  },\n  team: ['Sam Rivera (Founder & CEO)', 'Dev Patel (CTO)', 'Priya Natarajan (Clinical Lead)',\n         'Marcus Hale (Performance Lead)', 'Javier Monestel (Executive Assistant)'],\n  timezone: 'America/New_York',\n} }];\n"
+      },
+      "id": "f3271f3d-9686-5c2f-992d-85dea93ba7d5",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.notion.com/v1/data_sources/' + $json.notion.objectives + '/query' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { filter: { property: 'Health', select: { is_not_empty: true } } } }}",
+        "options": {}
+      },
+      "id": "483cce5e-e533-5be2-898c-104ce2a7bcc2",
+      "name": "Notion: active objectives",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Notion integration token (Authorization: Bearer)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const lineMap = { Clinical: 'clinical', Performance: 'performance', Company: 'company' };\nconst goals = ($input.first().json.results || []).map((p, i) => ({\n  id: 'g' + (i + 1),\n  line: lineMap[(p.properties['Business line'].select || {}).name] || 'company',\n  text: (p.properties.Objective.title[0] || {}).plain_text,\n})).filter(g => g.text);\nconst team = [\n  { id: 'sam', name: 'Sam Rivera', role: 'Founder & CEO', skills: ['partnerships', 'hiring'], capacity: 6 },\n  { id: 'dev', name: 'Dev Patel', role: 'CTO', skills: ['engineering', 'research', 'design'], capacity: 13 },\n  { id: 'priya', name: 'Priya Natarajan', role: 'Clinical Lead', skills: ['research', 'regulatory', 'partnerships'], capacity: 10 },\n  { id: 'marcus', name: 'Marcus Hale', role: 'Performance Lead', skills: ['growth', 'partnerships', 'design'], capacity: 10 },\n  { id: 'javier', name: 'Javier Monestel', role: 'Executive Assistant', skills: ['ops', 'hiring', 'partnerships'], capacity: 12 },\n];\nreturn [{ json: { month: $now.toFormat('yyyy-MM'), goals, team } }];\n"
+      },
+      "id": "c8cebf0b-0d05-570f-aef3-3708db449713",
+      "name": "Goals + team",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ],
+      "notes": "Keep the team roster here or read it from a Notion 'People' database.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://okr-to-linear.vercel.app/api/plan",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "887a2374-5421-5165-bf1d-f7d47ba9c041",
+      "name": "Plan with OKR planner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const plan = $input.first().json;\nconst team = $('Goals + team').first().json.team;\nconst load = {};\nfor (const i of plan.issues) {\n  const k = i.assigneeId + ':' + i.cycle;\n  load[k] = (load[k] || 0) + i.estimate;\n}\nconst over = team.flatMap(m => plan.cycles.map(c => ({ m, c, pts: load[m.id + ':' + c.number] || 0 })))\n  .filter(x => x.pts > x.m.capacity)\n  .map(x => `• ${x.m.name.split(' ')[0]}: ${x.pts}/${x.m.capacity} pts in cycle ${x.c.number}`);\nconst points = plan.issues.reduce((s, i) => s + i.estimate, 0);\nconst text = [\n  `*${plan.month} plan ready for review:* ${plan.projects.length} project${plan.projects.length === 1 ? '' : 's'} · ${plan.issues.length} issues · ${points} pts`,\n  over.length ? '*Over capacity*\\n' + over.join('\\n') : 'Everyone is within capacity ✅',\n  'Approve by triggering the \"Push approved plan\" webhook with this plan (or review it in the planner UI).',\n].join('\\n');\nreturn [{ json: { text, plan, team } }];\n"
+      },
+      "id": "9d926715-8338-51d8-b376-e5d697bc2c85",
+      "name": "Capacity summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { channel: $('Config').first().json.slackChannel, text: $json.text } }}",
+        "options": {}
+      },
+      "id": "57057ff3-2ac0-5a11-a013-352d83561511",
+      "name": "Slack: post for approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Slack bot token (Authorization: Bearer)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "1st Monday 9:00": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Notion: active objectives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notion: active objectives": {
+      "main": [
+        [
+          {
+            "node": "Goals + team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Goals + team": {
+      "main": [
+        [
+          {
+            "node": "Plan with OKR planner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan with OKR planner": {
+      "main": [
+        [
+          {
+            "node": "Capacity summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capacity summary": {
+      "main": [
+        [
+          {
+            "node": "Slack: post for approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

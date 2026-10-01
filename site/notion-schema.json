@@ -1,0 +1,262 @@
+{
+  "databases": [
+    {
+      "key": "objectives",
+      "title": "Objectives",
+      "icon": "🎯",
+      "description": "Company and business-line objectives for the current cycle.",
+      "properties": [
+        {
+          "name": "Objective",
+          "type": "title"
+        },
+        {
+          "name": "Business line",
+          "type": "select"
+        },
+        {
+          "name": "Cycle",
+          "type": "select"
+        },
+        {
+          "name": "Owner",
+          "type": "people"
+        },
+        {
+          "name": "Health",
+          "type": "select"
+        },
+        {
+          "name": "Why it matters",
+          "type": "rich_text"
+        },
+        {
+          "name": "Progress",
+          "type": "rollup"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "key": "key_results",
+      "title": "Key Results",
+      "icon": "📈",
+      "description": "Measurable results. Progress is computed from start, current and target.",
+      "properties": [
+        {
+          "name": "Key result",
+          "type": "title"
+        },
+        {
+          "name": "Metric",
+          "type": "rich_text"
+        },
+        {
+          "name": "Start",
+          "type": "number"
+        },
+        {
+          "name": "Current",
+          "type": "number"
+        },
+        {
+          "name": "Target",
+          "type": "number"
+        },
+        {
+          "name": "Owner",
+          "type": "people"
+        },
+        {
+          "name": "Last updated",
+          "type": "last_edited_time"
+        },
+        {
+          "name": "Progress",
+          "type": "formula"
+        }
+      ],
+      "relations": [
+        {
+          "name": "Objective",
+          "target": "objectives",
+          "back_name": "Key Results"
+        }
+      ]
+    },
+    {
+      "key": "projects",
+      "title": "Projects",
+      "icon": "🗂️",
+      "description": "Initiatives that move an objective. Execution lives in Linear; context lives here.",
+      "properties": [
+        {
+          "name": "Project",
+          "type": "title"
+        },
+        {
+          "name": "Business line",
+          "type": "select"
+        },
+        {
+          "name": "Status",
+          "type": "status"
+        },
+        {
+          "name": "Owner",
+          "type": "people"
+        },
+        {
+          "name": "Target date",
+          "type": "date"
+        },
+        {
+          "name": "Linear project",
+          "type": "url"
+        }
+      ],
+      "relations": [
+        {
+          "name": "Objective",
+          "target": "objectives",
+          "back_name": "Projects"
+        }
+      ]
+    },
+    {
+      "key": "meetings",
+      "title": "Meetings",
+      "icon": "🗓️",
+      "description": "Every meeting with its recording, summary, decisions and follow-ups.",
+      "properties": [
+        {
+          "name": "Meeting",
+          "type": "title"
+        },
+        {
+          "name": "Date",
+          "type": "date"
+        },
+        {
+          "name": "Type",
+          "type": "select"
+        },
+        {
+          "name": "Business line",
+          "type": "select"
+        },
+        {
+          "name": "Attendees",
+          "type": "people"
+        },
+        {
+          "name": "External attendees",
+          "type": "rich_text"
+        },
+        {
+          "name": "Recording",
+          "type": "url"
+        },
+        {
+          "name": "Summary",
+          "type": "rich_text"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "key": "decisions",
+      "title": "Decisions",
+      "icon": "⚖️",
+      "description": "Decisions waiting on the founder, and the log of what was decided and why.",
+      "properties": [
+        {
+          "name": "Decision",
+          "type": "title"
+        },
+        {
+          "name": "Status",
+          "type": "status"
+        },
+        {
+          "name": "Business line",
+          "type": "select"
+        },
+        {
+          "name": "Requested by",
+          "type": "people"
+        },
+        {
+          "name": "Deadline",
+          "type": "date"
+        },
+        {
+          "name": "Options",
+          "type": "rich_text"
+        },
+        {
+          "name": "Outcome",
+          "type": "rich_text"
+        }
+      ],
+      "relations": [
+        {
+          "name": "Meeting",
+          "target": "meetings",
+          "back_name": "Decisions"
+        }
+      ]
+    },
+    {
+      "key": "follow_ups",
+      "title": "Follow-ups",
+      "icon": "✅",
+      "description": "Every commitment with an owner and a due date. The radar automation reads this.",
+      "properties": [
+        {
+          "name": "Follow-up",
+          "type": "title"
+        },
+        {
+          "name": "Owner",
+          "type": "people"
+        },
+        {
+          "name": "Due",
+          "type": "date"
+        },
+        {
+          "name": "Priority",
+          "type": "select"
+        },
+        {
+          "name": "Status",
+          "type": "status"
+        },
+        {
+          "name": "Source",
+          "type": "select"
+        },
+        {
+          "name": "Business line",
+          "type": "select"
+        },
+        {
+          "name": "External link",
+          "type": "url"
+        },
+        {
+          "name": "Overdue",
+          "type": "formula"
+        }
+      ],
+      "relations": [
+        {
+          "name": "Meeting",
+          "target": "meetings",
+          "back_name": "Follow-ups"
+        }
+      ]
+    }
+  ]
+}

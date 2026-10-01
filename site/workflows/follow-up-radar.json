@@ -1,0 +1,173 @@
+{
+  "name": "Follow-up radar (Notion → per-owner Slack nudges)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 16 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "11fab9c3-e67d-5bab-ba0f-e7c2c6cb92a7",
+      "name": "Weekdays 16:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Edit these once after importing. IDs come from your own workspace.\nreturn [{ json: {\n  slackChannel: 'C0123456789',          // e.g. #founder-ops\n  founderSlackId: 'U0123456789',        // DM target for the brief\n  linearTeamId: 'YOUR-LINEAR-TEAM-ID',\n  notion: {\n    followUps: 'FOLLOW-UPS-DATA-SOURCE-ID',\n    meetings: 'MEETINGS-DATA-SOURCE-ID',\n    keyResults: 'KEY-RESULTS-DATA-SOURCE-ID',\n    decisions: 'DECISIONS-DATA-SOURCE-ID',\n    objectives: 'OBJECTIVES-DATA-SOURCE-ID',\n    tripsParentPage: 'TRAVEL-PAGE-ID',\n    investorUpdatesPage: 'INVESTOR-UPDATES-PAGE-ID',\n  },\n  team: ['Sam Rivera (Founder & CEO)', 'Dev Patel (CTO)', 'Priya Natarajan (Clinical Lead)',\n         'Marcus Hale (Performance Lead)', 'Javier Monestel (Executive Assistant)'],\n  timezone: 'America/New_York',\n} }];\n"
+      },
+      "id": "9310c86e-5d8a-5d83-8155-7b91c383fa05",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.notion.com/v1/data_sources/' + $json.notion.followUps + '/query' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { filter: { and: [ { property: 'Status', status: { does_not_equal: 'Done' } }, { property: 'Due', date: { on_or_before: $now.plus({ days: 1 }).toISODate() } } ] }, sorts: [ { property: 'Due', direction: 'ascending' } ] } }}",
+        "options": {}
+      },
+      "id": "bf13462d-ff3d-56f8-936c-a82767bf4fa1",
+      "name": "Notion: due follow-ups",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Notion integration token (Authorization: Bearer)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const today = $now.toISODate();\nconst pages = $input.first().json.results || [];\nconst byOwner = {};\nfor (const p of pages) {\n  const props = p.properties;\n  const title = (props['Follow-up'].title[0] || {}).plain_text || 'Untitled';\n  const due = props.Due.date && props.Due.date.start;\n  for (const person of props.Owner.people || [{ name: 'Unassigned', id: null }]) {\n    const days = due ? Math.round((Date.parse(today) - Date.parse(due)) / 86400000) : 0;\n    (byOwner[person.name] ||= []).push({ title, due, days, url: p.url });\n  }\n}\nreturn Object.entries(byOwner).map(([owner, items]) => {\n  items.sort((a, b) => b.days - a.days);\n  const lines = items.map((i, n) => `${n + 1}. ${i.title} — ${i.days > 0 ? i.days + ' days overdue' : i.days === 0 ? 'due today' : 'due tomorrow'} · <${i.url}|open>`);\n  const first = owner.split(' ')[0];\n  return { json: { owner, text: `Hi ${first}, quick check on your follow-ups:\\n${lines.join('\\n')}\\nReply 'done 2' to close item 2, or 'snooze 1' to push it two days.` } };\n});\n"
+      },
+      "id": "99a81655-9cf4-5ecb-8dd6-f967c40f04ff",
+      "name": "Group by owner",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ],
+      "notes": "Deterministic on purpose: no model needed for a reminder.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { channel: $('Config').first().json.slackChannel, text: $json.text } }}",
+        "options": {}
+      },
+      "id": "b7605990-788a-5775-a91d-beea65abc741",
+      "name": "Slack: nudge owner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Slack bot token (Authorization: Bearer)"
+        }
+      },
+      "notes": "Swap channel for the owner's Slack user id (users.lookupByEmail) to DM them directly.",
+      "notesInFlow": true
+    }
+  ],
+  "connections": {
+    "Weekdays 16:00": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Notion: due follow-ups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notion: due follow-ups": {
+      "main": [
+        [
+          {
+            "node": "Group by owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Group by owner": {
+      "main": [
+        [
+          {
+            "node": "Slack: nudge owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

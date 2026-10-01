@@ -1,0 +1,199 @@
+{
+  "name": "Founder daily brief (Command Center + Claude → Slack DM)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "45 7 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "b8e17c30-0671-59d6-8e81-f8606e2b5cf4",
+      "name": "Weekdays 7:45",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Edit these once after importing. IDs come from your own workspace.\nreturn [{ json: {\n  slackChannel: 'C0123456789',          // e.g. #founder-ops\n  founderSlackId: 'U0123456789',        // DM target for the brief\n  linearTeamId: 'YOUR-LINEAR-TEAM-ID',\n  notion: {\n    followUps: 'FOLLOW-UPS-DATA-SOURCE-ID',\n    meetings: 'MEETINGS-DATA-SOURCE-ID',\n    keyResults: 'KEY-RESULTS-DATA-SOURCE-ID',\n    decisions: 'DECISIONS-DATA-SOURCE-ID',\n    objectives: 'OBJECTIVES-DATA-SOURCE-ID',\n    tripsParentPage: 'TRAVEL-PAGE-ID',\n    investorUpdatesPage: 'INVESTOR-UPDATES-PAGE-ID',\n  },\n  team: ['Sam Rivera (Founder & CEO)', 'Dev Patel (CTO)', 'Priya Natarajan (Clinical Lead)',\n         'Marcus Hale (Performance Lead)', 'Javier Monestel (Executive Assistant)'],\n  timezone: 'America/New_York',\n} }];\n"
+      },
+      "id": "ee219505-b334-5da1-9ce4-b1feb75cea92",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://founder-command-center-jet.vercel.app/api/snapshot",
+        "options": {}
+      },
+      "id": "8852fefd-04f2-5487-9d21-40d7443766a5",
+      "name": "Get company snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ],
+      "notes": "Any JSON source works here: Notion queries, Linear, a Google Sheet.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\"model\": \"claude-opus-5-5\", \"max_tokens\": 16000, \"system\": \"You are the chief-of-staff assistant to a startup founder with a Clinical and a Performance business line. Write today's brief in Slack Markdown from the JSON snapshot: TL;DR with counts; 'Needs you today' (decisions due within 48h with options, the founder's overdue items); one short section per line (OKR pulse vs cycle elapsed, overdue follow-ups with owners, blockers); meetings today and tomorrow with prep; delegation suggestions. Only use the snapshot. Max 250 words.\", \"output_config\": {\"effort\": \"medium\"}, \"messages\": [{\"role\": \"user\", \"content\": JSON.stringify($json)}]} }}",
+        "options": {}
+      },
+      "id": "cf6c3fdf-9940-55a3-8779-ab97c865ad7f",
+      "name": "Claude: write brief",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Anthropic API key (x-api-key)"
+        }
+      },
+      "notes": "Claude (claude-opus-5-5). Credential: Header Auth with name x-api-key.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Claude returns content blocks (thinking + text). Keep only the text.\nconst res = $input.first().json;\nif (res.stop_reason === 'refusal') throw new Error('Model declined the request');\nconst text = (res.content || []).filter(b => b.type === 'text').map(b => b.text).join('\\n').trim();\n\nreturn [{ json: { text } }];\n"
+      },
+      "id": "13126361-d41e-500c-96f8-ad6ad63c04e6",
+      "name": "Extract text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { channel: $('Config').first().json.founderSlackId, text: $json.text } }}",
+        "options": {}
+      },
+      "id": "eb6a72d7-5a91-5d18-94ca-7b08e7506bcb",
+      "name": "Slack: DM founder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Slack bot token (Authorization: Bearer)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Weekdays 7:45": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get company snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get company snapshot": {
+      "main": [
+        [
+          {
+            "node": "Claude: write brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude: write brief": {
+      "main": [
+        [
+          {
+            "node": "Extract text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text": {
+      "main": [
+        [
+          {
+            "node": "Slack: DM founder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

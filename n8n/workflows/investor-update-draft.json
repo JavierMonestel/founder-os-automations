@@ -1,0 +1,348 @@
+{
+  "name": "Monthly investor update draft (Notion KRs + Linear → Claude → Notion draft)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 14 26-31 * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "b47efbbc-37c8-5eb4-8049-65d8c0b53a4a",
+      "name": "Month-end 14:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Cron fires on the last days of the month; continue only on the final weekday.\nconst today = $now;\nlet d = today.endOf('month');\nwhile (d.weekday > 5) d = d.minus({ days: 1 });\nreturn today.hasSame(d, 'day') ? $input.all() : [];\n"
+      },
+      "id": "52bcf584-8e10-5a7d-8fc2-f98298bd56c3",
+      "name": "Last business day?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Edit these once after importing. IDs come from your own workspace.\nreturn [{ json: {\n  slackChannel: 'C0123456789',          // e.g. #founder-ops\n  founderSlackId: 'U0123456789',        // DM target for the brief\n  linearTeamId: 'YOUR-LINEAR-TEAM-ID',\n  notion: {\n    followUps: 'FOLLOW-UPS-DATA-SOURCE-ID',\n    meetings: 'MEETINGS-DATA-SOURCE-ID',\n    keyResults: 'KEY-RESULTS-DATA-SOURCE-ID',\n    decisions: 'DECISIONS-DATA-SOURCE-ID',\n    objectives: 'OBJECTIVES-DATA-SOURCE-ID',\n    tripsParentPage: 'TRAVEL-PAGE-ID',\n    investorUpdatesPage: 'INVESTOR-UPDATES-PAGE-ID',\n  },\n  team: ['Sam Rivera (Founder & CEO)', 'Dev Patel (CTO)', 'Priya Natarajan (Clinical Lead)',\n         'Marcus Hale (Performance Lead)', 'Javier Monestel (Executive Assistant)'],\n  timezone: 'America/New_York',\n} }];\n"
+      },
+      "id": "176ffae0-683f-51f2-b290-f899a808e840",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.notion.com/v1/data_sources/' + $json.notion.keyResults + '/query' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { page_size: 50 } }}",
+        "options": {}
+      },
+      "id": "81009675-4acb-582a-a2cf-899bc2b22e32",
+      "name": "Notion: key results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Notion integration token (Authorization: Bearer)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linear.app/graphql",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { query: 'query($after: DateTimeOrDuration!) { issues(filter: { completedAt: { gt: $after } }, first: 100) { nodes { identifier title project { name } completedAt } } }', variables: { after: $now.startOf('month').toISO() } } }}",
+        "options": {}
+      },
+      "id": "63c6fb5f-bd9f-5be8-a279-73f8d376d70a",
+      "name": "Linear: completed this month",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Linear API key (Authorization)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const krs = ($('Notion: key results').first().json.results || []).map(p => ({\n  key_result: (p.properties['Key result'].title[0] || {}).plain_text,\n  start: p.properties.Start.number, current: p.properties.Current.number, target: p.properties.Target.number,\n}));\nconst done = (($('Linear: completed this month').first().json.data || {}).issues || { nodes: [] }).nodes\n  .map(n => `${n.identifier} ${n.title}${n.project ? ' (' + n.project.name + ')' : ''}`);\nreturn [{ json: { month: $now.toFormat('MMMM yyyy'), key_results: krs, completed_work: done } }];\n"
+      },
+      "id": "70444cf9-b951-5be4-9a02-3e4729f7d39f",
+      "name": "Assemble inputs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\"model\": \"claude-opus-5-5\", \"max_tokens\": 16000, \"system\": \"Draft the monthly investor update for a health-tech startup with Clinical and Performance lines. Format: subject line; 3-bullet TL;DR; metrics table (start → current → target, % to goal); Clinical and Performance bullets; honest lowlights if any key result is behind plan; up to 3 asks. Every number must come from the inputs. Never claim clearances, outcomes or partnerships not in the inputs. Mark uncertain items [CHECK]. 300-450 words, Markdown.\", \"output_config\": {\"effort\": \"medium\"}, \"messages\": [{\"role\": \"user\", \"content\": JSON.stringify($json)}]} }}",
+        "options": {}
+      },
+      "id": "ec09155e-20b4-5afe-b90e-693dc49afce6",
+      "name": "Claude: draft update",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Anthropic API key (x-api-key)"
+        }
+      },
+      "notes": "Claude (claude-opus-5-5). Credential: Header Auth with name x-api-key.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Claude returns content blocks (thinking + text). Keep only the text.\nconst res = $input.first().json;\nif (res.stop_reason === 'refusal') throw new Error('Model declined the request');\nconst text = (res.content || []).filter(b => b.type === 'text').map(b => b.text).join('\\n').trim();\n\n// Notion caps rich text at 2000 characters per block, so split by paragraph.\nconst blocks = text.split(/\\n\\n+/).map(p => ({ object: 'block', type: 'paragraph',\n  paragraph: { rich_text: [{ type: 'text', text: { content: p.slice(0, 1990) } }] } }));\nreturn [{ json: { title: `Investor update — ${$('Assemble inputs').first().json.month} (draft)`, blocks } }];\n"
+      },
+      "id": "5fa2e0ab-7cfc-59f8-9ca4-3b49cde2babd",
+      "name": "To Notion blocks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { parent: { page_id: $('Config').first().json.notion.investorUpdatesPage }, properties: { title: { title: [ { text: { content: $json.title } } ] } }, children: $json.blocks } }}",
+        "options": {}
+      },
+      "id": "b6abbd39-97cb-55e1-9788-f1acade79989",
+      "name": "Notion: save draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Notion integration token (Authorization: Bearer)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { channel: $('Config').first().json.founderSlackId, text: 'Investor update draft is ready for your edits: ' + $json.url } }}",
+        "options": {}
+      },
+      "id": "7c8f6f5c-8c17-5801-89d8-0f5c349dd0bb",
+      "name": "Slack: tell founder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2340,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Slack bot token (Authorization: Bearer)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Month-end 14:00": {
+      "main": [
+        [
+          {
+            "node": "Last business day?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Last business day?": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Notion: key results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notion: key results": {
+      "main": [
+        [
+          {
+            "node": "Linear: completed this month",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Linear: completed this month": {
+      "main": [
+        [
+          {
+            "node": "Assemble inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble inputs": {
+      "main": [
+        [
+          {
+            "node": "Claude: draft update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude: draft update": {
+      "main": [
+        [
+          {
+            "node": "To Notion blocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "To Notion blocks": {
+      "main": [
+        [
+          {
+            "node": "Notion: save draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notion: save draft": {
+      "main": [
+        [
+          {
+            "node": "Slack: tell founder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

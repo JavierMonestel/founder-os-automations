@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pip install -r requirements-dev.txt
+      - run: npm install
+      - run: ruff check . && ruff format --check .
+      - name: Generated workflows are up to date
+        run: python -m n8n.build --check
+      - run: pytest -q
+      - name: Code-node logic
+        run: npm test
+
+  n8n-import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Import every workflow into a real n8n
+        env:
+          N8N_USER_FOLDER: ${{ runner.temp }}/n8n
+          N8N_DIAGNOSTICS_ENABLED: "false"
+        run: npx -y n8n@2 import:workflow --separate --input=n8n/workflows

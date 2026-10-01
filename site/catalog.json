@@ -1,0 +1,531 @@
+{
+  "total_hours_saved_per_month": 36.1,
+  "workflows": [
+    {
+      "slug": "meeting-to-actions",
+      "name": "Meeting → owned follow-ups (Grain → Claude → Linear · Attio · Notion · Slack)",
+      "description": "When a meeting recording is ready, Claude extracts decisions and commitments with verbatim evidence, creates Linear issues, Attio tasks and Notion follow-ups, and posts a recap with every owner to Slack.",
+      "trigger": "Webhook: meeting recorder 'recording ready'",
+      "tools": [
+        "Grain",
+        "Claude",
+        "Linear",
+        "Attio",
+        "Notion",
+        "Slack"
+      ],
+      "minutes_saved_per_run": 25,
+      "runs_per_month": 40,
+      "hours_saved_per_month": 16.7,
+      "nodes": [
+        {
+          "name": "Recording ready",
+          "type": "webhook",
+          "notes": null
+        },
+        {
+          "name": "Config",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Build transcript",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Claude: extract actions",
+          "type": "httpRequest",
+          "notes": "Claude (claude-opus-5-5). Credential: Header Auth with name x-api-key."
+        },
+        {
+          "name": "Parse & validate",
+          "type": "code",
+          "notes": "Drops any item whose quote isn't found verbatim in the transcript."
+        },
+        {
+          "name": "Only Linear items",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Only Attio items",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Only Notion items",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Linear: create issue",
+          "type": "httpRequest",
+          "notes": null
+        },
+        {
+          "name": "Attio: create task",
+          "type": "httpRequest",
+          "notes": "Link to the partner's company record by adding linked_records once the record id is known."
+        },
+        {
+          "name": "Notion: add follow-up",
+          "type": "httpRequest",
+          "notes": null
+        },
+        {
+          "name": "Compose recap",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Slack: post recap",
+          "type": "httpRequest",
+          "notes": null
+        }
+      ],
+      "edges": [
+        [
+          "Recording ready",
+          "Config"
+        ],
+        [
+          "Config",
+          "Build transcript"
+        ],
+        [
+          "Build transcript",
+          "Claude: extract actions"
+        ],
+        [
+          "Claude: extract actions",
+          "Parse & validate"
+        ],
+        [
+          "Parse & validate",
+          "Only Linear items"
+        ],
+        [
+          "Parse & validate",
+          "Only Attio items"
+        ],
+        [
+          "Parse & validate",
+          "Only Notion items"
+        ],
+        [
+          "Only Linear items",
+          "Linear: create issue"
+        ],
+        [
+          "Only Attio items",
+          "Attio: create task"
+        ],
+        [
+          "Only Notion items",
+          "Notion: add follow-up"
+        ],
+        [
+          "Linear: create issue",
+          "Compose recap"
+        ],
+        [
+          "Attio: create task",
+          "Compose recap"
+        ],
+        [
+          "Notion: add follow-up",
+          "Compose recap"
+        ],
+        [
+          "Compose recap",
+          "Slack: post recap"
+        ]
+      ],
+      "file": "n8n/workflows/meeting-to-actions.json"
+    },
+    {
+      "slug": "founder-daily-brief",
+      "name": "Founder daily brief (Command Center + Claude → Slack DM)",
+      "description": "Every weekday at 7:45 AM, pulls the company snapshot (OKRs, follow-ups, decisions, blockers, meetings) and has Claude write a 60-second brief that lands in the founder's Slack DMs.",
+      "trigger": "Schedule: weekdays 7:45 AM",
+      "tools": [
+        "Founder Command Center",
+        "Claude",
+        "Slack"
+      ],
+      "minutes_saved_per_run": 20,
+      "runs_per_month": 21,
+      "hours_saved_per_month": 7.0,
+      "nodes": [
+        {
+          "name": "Weekdays 7:45",
+          "type": "scheduleTrigger",
+          "notes": null
+        },
+        {
+          "name": "Config",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Get company snapshot",
+          "type": "httpRequest",
+          "notes": "Any JSON source works here: Notion queries, Linear, a Google Sheet."
+        },
+        {
+          "name": "Claude: write brief",
+          "type": "httpRequest",
+          "notes": "Claude (claude-opus-5-5). Credential: Header Auth with name x-api-key."
+        },
+        {
+          "name": "Extract text",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Slack: DM founder",
+          "type": "httpRequest",
+          "notes": null
+        }
+      ],
+      "edges": [
+        [
+          "Weekdays 7:45",
+          "Config"
+        ],
+        [
+          "Config",
+          "Get company snapshot"
+        ],
+        [
+          "Get company snapshot",
+          "Claude: write brief"
+        ],
+        [
+          "Claude: write brief",
+          "Extract text"
+        ],
+        [
+          "Extract text",
+          "Slack: DM founder"
+        ]
+      ],
+      "file": "n8n/workflows/founder-daily-brief.json"
+    },
+    {
+      "slug": "follow-up-radar",
+      "name": "Follow-up radar (Notion → per-owner Slack nudges)",
+      "description": "Every weekday at 4 PM, finds open follow-ups that are overdue or due tomorrow in Notion, groups them by owner, and sends each owner one short, friendly Slack nudge. Nothing falls through the cracks.",
+      "trigger": "Schedule: weekdays 4:00 PM",
+      "tools": [
+        "Notion",
+        "Slack"
+      ],
+      "minutes_saved_per_run": 15,
+      "runs_per_month": 21,
+      "hours_saved_per_month": 5.2,
+      "nodes": [
+        {
+          "name": "Weekdays 16:00",
+          "type": "scheduleTrigger",
+          "notes": null
+        },
+        {
+          "name": "Config",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Notion: due follow-ups",
+          "type": "httpRequest",
+          "notes": null
+        },
+        {
+          "name": "Group by owner",
+          "type": "code",
+          "notes": "Deterministic on purpose: no model needed for a reminder."
+        },
+        {
+          "name": "Slack: nudge owner",
+          "type": "httpRequest",
+          "notes": "Swap channel for the owner's Slack user id (users.lookupByEmail) to DM them directly."
+        }
+      ],
+      "edges": [
+        [
+          "Weekdays 16:00",
+          "Config"
+        ],
+        [
+          "Config",
+          "Notion: due follow-ups"
+        ],
+        [
+          "Notion: due follow-ups",
+          "Group by owner"
+        ],
+        [
+          "Group by owner",
+          "Slack: nudge owner"
+        ]
+      ],
+      "file": "n8n/workflows/follow-up-radar.json"
+    },
+    {
+      "slug": "goals-to-linear",
+      "name": "Monthly goals → Linear plan (Notion → OKR planner → Slack review)",
+      "description": "On the first Monday of the month, reads active objectives from Notion, generates a capacity-checked Linear plan, and posts the summary to Slack with a one-click approval link that pushes it to Linear.",
+      "trigger": "Schedule: first Monday of the month, 9:00 AM",
+      "tools": [
+        "Notion",
+        "OKR → Linear Planner",
+        "Claude",
+        "Linear",
+        "Slack"
+      ],
+      "minutes_saved_per_run": 180,
+      "runs_per_month": 1,
+      "hours_saved_per_month": 3.0,
+      "nodes": [
+        {
+          "name": "1st Monday 9:00",
+          "type": "scheduleTrigger",
+          "notes": null
+        },
+        {
+          "name": "Config",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Notion: active objectives",
+          "type": "httpRequest",
+          "notes": null
+        },
+        {
+          "name": "Goals + team",
+          "type": "code",
+          "notes": "Keep the team roster here or read it from a Notion 'People' database."
+        },
+        {
+          "name": "Plan with OKR planner",
+          "type": "httpRequest",
+          "notes": null
+        },
+        {
+          "name": "Capacity summary",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Slack: post for approval",
+          "type": "httpRequest",
+          "notes": null
+        }
+      ],
+      "edges": [
+        [
+          "1st Monday 9:00",
+          "Config"
+        ],
+        [
+          "Config",
+          "Notion: active objectives"
+        ],
+        [
+          "Notion: active objectives",
+          "Goals + team"
+        ],
+        [
+          "Goals + team",
+          "Plan with OKR planner"
+        ],
+        [
+          "Plan with OKR planner",
+          "Capacity summary"
+        ],
+        [
+          "Capacity summary",
+          "Slack: post for approval"
+        ]
+      ],
+      "file": "n8n/workflows/goals-to-linear.json"
+    },
+    {
+      "slug": "investor-update-draft",
+      "name": "Monthly investor update draft (Notion KRs + Linear → Claude → Notion draft)",
+      "description": "On the last business day of the month, gathers key results from Notion and work completed in Linear, has Claude draft the investor update with every number sourced, saves it as a Notion draft and pings the founder.",
+      "trigger": "Schedule: last weekday of the month, 2:00 PM",
+      "tools": [
+        "Notion",
+        "Linear",
+        "Claude",
+        "Slack"
+      ],
+      "minutes_saved_per_run": 120,
+      "runs_per_month": 1,
+      "hours_saved_per_month": 2.0,
+      "nodes": [
+        {
+          "name": "Month-end 14:00",
+          "type": "scheduleTrigger",
+          "notes": null
+        },
+        {
+          "name": "Last business day?",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Config",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Notion: key results",
+          "type": "httpRequest",
+          "notes": null
+        },
+        {
+          "name": "Linear: completed this month",
+          "type": "httpRequest",
+          "notes": null
+        },
+        {
+          "name": "Assemble inputs",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Claude: draft update",
+          "type": "httpRequest",
+          "notes": "Claude (claude-opus-5-5). Credential: Header Auth with name x-api-key."
+        },
+        {
+          "name": "To Notion blocks",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Notion: save draft",
+          "type": "httpRequest",
+          "notes": null
+        },
+        {
+          "name": "Slack: tell founder",
+          "type": "httpRequest",
+          "notes": null
+        }
+      ],
+      "edges": [
+        [
+          "Month-end 14:00",
+          "Last business day?"
+        ],
+        [
+          "Last business day?",
+          "Config"
+        ],
+        [
+          "Config",
+          "Notion: key results"
+        ],
+        [
+          "Notion: key results",
+          "Linear: completed this month"
+        ],
+        [
+          "Linear: completed this month",
+          "Assemble inputs"
+        ],
+        [
+          "Assemble inputs",
+          "Claude: draft update"
+        ],
+        [
+          "Claude: draft update",
+          "To Notion blocks"
+        ],
+        [
+          "To Notion blocks",
+          "Notion: save draft"
+        ],
+        [
+          "Notion: save draft",
+          "Slack: tell founder"
+        ]
+      ],
+      "file": "n8n/workflows/investor-update-draft.json"
+    },
+    {
+      "slug": "travel-request",
+      "name": "Travel request → itinerary options (Webhook → Claude → Notion trip page)",
+      "description": "The founder (or a Slack form) submits a trip request. Claude prepares two itinerary options, calendar holds, conflicts and a checklist, saved as a Notion trip page for the EA to confirm and book. Nothing is booked automatically.",
+      "trigger": "Webhook: trip request form",
+      "tools": [
+        "Slack / form",
+        "Claude",
+        "Notion"
+      ],
+      "minutes_saved_per_run": 45,
+      "runs_per_month": 3,
+      "hours_saved_per_month": 2.2,
+      "nodes": [
+        {
+          "name": "Trip request",
+          "type": "webhook",
+          "notes": null
+        },
+        {
+          "name": "Config",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Claude: plan trip",
+          "type": "httpRequest",
+          "notes": "Claude (claude-opus-5-5). Credential: Header Auth with name x-api-key."
+        },
+        {
+          "name": "Trip page",
+          "type": "code",
+          "notes": null
+        },
+        {
+          "name": "Notion: create trip page",
+          "type": "httpRequest",
+          "notes": null
+        },
+        {
+          "name": "Reply with plan",
+          "type": "respondToWebhook",
+          "notes": null
+        }
+      ],
+      "edges": [
+        [
+          "Trip request",
+          "Config"
+        ],
+        [
+          "Config",
+          "Claude: plan trip"
+        ],
+        [
+          "Claude: plan trip",
+          "Trip page"
+        ],
+        [
+          "Trip page",
+          "Notion: create trip page"
+        ],
+        [
+          "Notion: create trip page",
+          "Reply with plan"
+        ]
+      ],
+      "file": "n8n/workflows/travel-request.json"
+    }
+  ]
+}

@@ -1,0 +1,203 @@
+{
+  "name": "Travel request → itinerary options (Webhook → Claude → Notion trip page)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trip-request",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "055392cc-fd02-5ae8-bf78-408c0928987d",
+      "name": "Trip request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "4d2a7894-86ac-58ee-97b7-463b8fcef55c"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Edit these once after importing. IDs come from your own workspace.\nreturn [{ json: {\n  slackChannel: 'C0123456789',          // e.g. #founder-ops\n  founderSlackId: 'U0123456789',        // DM target for the brief\n  linearTeamId: 'YOUR-LINEAR-TEAM-ID',\n  notion: {\n    followUps: 'FOLLOW-UPS-DATA-SOURCE-ID',\n    meetings: 'MEETINGS-DATA-SOURCE-ID',\n    keyResults: 'KEY-RESULTS-DATA-SOURCE-ID',\n    decisions: 'DECISIONS-DATA-SOURCE-ID',\n    objectives: 'OBJECTIVES-DATA-SOURCE-ID',\n    tripsParentPage: 'TRAVEL-PAGE-ID',\n    investorUpdatesPage: 'INVESTOR-UPDATES-PAGE-ID',\n  },\n  team: ['Sam Rivera (Founder & CEO)', 'Dev Patel (CTO)', 'Priya Natarajan (Clinical Lead)',\n         'Marcus Hale (Performance Lead)', 'Javier Monestel (Executive Assistant)'],\n  timezone: 'America/New_York',\n} }];\n"
+      },
+      "id": "c738accb-3ffa-5a30-955e-a8ce6cb27ddd",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\"model\": \"claude-opus-5-5\", \"max_tokens\": 16000, \"system\": \"You are an executive assistant planning a business trip for a startup founder. Produce two itinerary options (A: minimal time away, B: more buffer or lower cost) as time windows, not specific flights; calendar holds (travel, event, prep, recovery); a checklist (documents, materials such as a demo device, local transport, who to notify); and what you still need from the founder. Never present flights, prices or hotels as booked.\", \"output_config\": {\"effort\": \"medium\", \"format\": {\"type\": \"json_schema\", \"schema\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"options\", \"holds\", \"checklist\", \"need_from_founder\"], \"properties\": {\"options\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"label\", \"outbound\", \"return\", \"hotel_area\", \"rationale\"], \"properties\": {\"label\": {\"type\": \"string\"}, \"outbound\": {\"type\": \"string\"}, \"return\": {\"type\": \"string\"}, \"hotel_area\": {\"type\": \"string\"}, \"rationale\": {\"type\": \"string\"} } } }, \"holds\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"title\", \"start\", \"end\"], \"properties\": {\"title\": {\"type\": \"string\"}, \"start\": {\"type\": \"string\"}, \"end\": {\"type\": \"string\"} } } }, \"checklist\": {\"type\": \"array\", \"items\": {\"type\": \"string\"} }, \"need_from_founder\": {\"type\": \"array\", \"items\": {\"type\": \"string\"} } } } } }, \"messages\": [{\"role\": \"user\", \"content\": JSON.stringify($('Trip request').first().json.body)}]} }}",
+        "options": {}
+      },
+      "id": "6aa66213-e05d-58d9-be25-bb2b18e905ac",
+      "name": "Claude: plan trip",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Anthropic API key (x-api-key)"
+        }
+      },
+      "notes": "Claude (claude-opus-5-5). Credential: Header Auth with name x-api-key.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Claude returns content blocks (thinking + text). Keep only the text.\nconst res = $input.first().json;\nif (res.stop_reason === 'refusal') throw new Error('Model declined the request');\nconst text = (res.content || []).filter(b => b.type === 'text').map(b => b.text).join('\\n').trim();\n\nconst plan = JSON.parse(text);\nconst req = $('Trip request').first().json.body;\nconst para = t => ({ object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: t.slice(0, 1990) } }] } });\nconst head = t => ({ object: 'block', type: 'heading_2', heading_2: { rich_text: [{ type: 'text', text: { content: t } }] } });\nconst todo = t => ({ object: 'block', type: 'to_do', to_do: { rich_text: [{ type: 'text', text: { content: t } }], checked: false } });\nconst blocks = [\n  head('Options'),\n  ...plan.options.map(o => para(`${o.label}: out ${o.outbound} · back ${o.return} · stay near ${o.hotel_area}. ${o.rationale}`)),\n  head('Calendar holds'), ...plan.holds.map(h => para(`${h.title}: ${h.start} → ${h.end}`)),\n  head('Checklist'), ...plan.checklist.map(todo),\n  head('Need from the founder'), ...plan.need_from_founder.map(todo),\n];\nreturn [{ json: { title: `Trip: ${req.destination} — ${req.purpose}`, blocks, plan } }];\n"
+      },
+      "id": "c7cdc947-af83-5451-b19f-6861081ffa60",
+      "name": "Trip page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { parent: { page_id: $('Config').first().json.notion.tripsParentPage }, properties: { title: { title: [ { text: { content: $json.title } } ] } }, children: $json.blocks } }}",
+        "options": {}
+      },
+      "id": "b952fb44-0a82-53fb-b2ec-31781ff4360b",
+      "name": "Notion: create trip page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Notion integration token (Authorization: Bearer)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, notion_url: $json.url, options: $('Trip page').first().json.plan.options } }}",
+        "options": {}
+      },
+      "id": "9038b35a-c4fe-5139-9c9f-2a63bbc8594c",
+      "name": "Reply with plan",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1300,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Trip request": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Claude: plan trip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude: plan trip": {
+      "main": [
+        [
+          {
+            "node": "Trip page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trip page": {
+      "main": [
+        [
+          {
+            "node": "Notion: create trip page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notion: create trip page": {
+      "main": [
+        [
+          {
+            "node": "Reply with plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

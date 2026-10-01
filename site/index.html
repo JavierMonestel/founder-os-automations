@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Founder OS · Automation Library</title>
+  <meta name="description" content="Importable n8n workflows, a one-command Notion company OS and a production prompt library for an AI-native executive assistant.">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="banner">Fictional company and team · independent portfolio project, not affiliated with any company.</div>
+  <header class="nav">
+    <a class="brand" href="#">
+      <img src="icon.svg" alt="" width="30" height="30">
+      <span><strong>Founder OS</strong><small>Automation Library</small></span>
+    </a>
+    <nav>
+      <a href="#workflows">Workflows</a>
+      <a href="#audit">ROI &amp; audit</a>
+      <a href="#notion">Notion OS</a>
+      <a href="#prompts">Prompts</a>
+      <a href="https://github.com/JavierMonestel/founder-os-automations" target="_blank" rel="noopener">GitHub ↗</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero container">
+      <p class="eyebrow">For an AI-native executive assistant</p>
+      <h1>The operating system around a founder, <span class="accent">automated</span>.</h1>
+      <p class="lead">Six importable <b>n8n workflows</b>, a <b>Notion company OS</b> you can build with one command, and the <b>prompt library</b> behind them. Built for an early-stage startup running a clinical line and a performance line on Notion, Linear, Attio, Grain, Slack and Claude.</p>
+      <div class="kpis">
+        <div><b id="kpi-hours">–</b><span>hours/month returned to the team</span></div>
+        <div><b id="kpi-workflows">–</b><span>importable workflows</span></div>
+        <div><b>6</b><span>linked Notion databases</span></div>
+        <div><b>6</b><span>prompt contracts</span></div>
+      </div>
+    </section>
+
+    <section id="workflows" class="container section">
+      <div class="section-head">
+        <h2>Workflows</h2>
+        <p>Each one is a plain n8n JSON file: <i>Import from file</i>, add four credentials (Anthropic, Notion, Linear, Slack), edit the <code>Config</code> node, done. Outward actions (emails, bookings, payments) stay human.</p>
+      </div>
+      <div id="workflow-grid" class="grid grid-1"></div>
+    </section>
+
+    <section id="audit" class="container section">
+      <div class="section-head">
+        <h2>ROI calculator &amp; process audit</h2>
+        <p>Step one of automating anything: list the recurring work, estimate the time, and rank it by <b>hours saved ÷ effort to automate</b>. Edit the numbers. Everything stays in your browser.</p>
+      </div>
+      <div class="audit card">
+        <table class="table" id="audit-table">
+          <thead>
+            <tr><th>Recurring process</th><th>Minutes per run</th><th>Runs per month</th><th>Effort to automate (1–5)</th><th>Hours / month</th><th>Score</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr><td colspan="7"><button class="btn" id="add-row" type="button">+ Add a process</button> <button class="btn btn-ghost" id="reset-rows" type="button">Reset to examples</button></td></tr>
+          </tfoot>
+        </table>
+        <div class="audit-summary" id="audit-summary"></div>
+      </div>
+    </section>
+
+    <section id="notion" class="container section">
+      <div class="section-head">
+        <h2>Notion company OS</h2>
+        <p>A single source of truth: objectives roll up key-result progress, meetings link to the decisions and follow-ups they created, and the follow-up radar reads <code>Overdue</code> every afternoon. One command builds it in any workspace:</p>
+        <pre class="cmd">NOTION_API_KEY=ntn_… python -m notion_os.bootstrap --parent &lt;page-id&gt; --sample-data</pre>
+      </div>
+      <div class="erd card"><svg id="erd" role="img" aria-label="Relationships between the Notion databases"></svg></div>
+      <div id="db-grid" class="grid grid-3"></div>
+    </section>
+
+    <section id="prompts" class="container section">
+      <div class="section-head">
+        <h2>Prompt library</h2>
+        <p>Every prompt is a contract: inputs, output format, what it must never do, and the checks used to test it.</p>
+      </div>
+      <div class="grid grid-3" id="prompt-grid"></div>
+    </section>
+  </main>
+
+  <footer class="footer">Built by Javier Monestel · n8n · Notion API · Claude · <a href="https://github.com/JavierMonestel">github.com/JavierMonestel</a></footer>
+  <script src="app.js"></script>
+</body>
+</html>

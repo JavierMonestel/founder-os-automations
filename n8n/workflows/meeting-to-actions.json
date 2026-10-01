@@ -1,0 +1,422 @@
+{
+  "name": "Meeting → owned follow-ups (Grain → Claude → Linear · Attio · Notion · Slack)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meeting-recording",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "e23763cc-8e1b-59e4-9483-c2ceea6b8663",
+      "name": "Recording ready",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "e6578f64-c061-5503-bbbd-069ebb112fc0"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Edit these once after importing. IDs come from your own workspace.\nreturn [{ json: {\n  slackChannel: 'C0123456789',          // e.g. #founder-ops\n  founderSlackId: 'U0123456789',        // DM target for the brief\n  linearTeamId: 'YOUR-LINEAR-TEAM-ID',\n  notion: {\n    followUps: 'FOLLOW-UPS-DATA-SOURCE-ID',\n    meetings: 'MEETINGS-DATA-SOURCE-ID',\n    keyResults: 'KEY-RESULTS-DATA-SOURCE-ID',\n    decisions: 'DECISIONS-DATA-SOURCE-ID',\n    objectives: 'OBJECTIVES-DATA-SOURCE-ID',\n    tripsParentPage: 'TRAVEL-PAGE-ID',\n    investorUpdatesPage: 'INVESTOR-UPDATES-PAGE-ID',\n  },\n  team: ['Sam Rivera (Founder & CEO)', 'Dev Patel (CTO)', 'Priya Natarajan (Clinical Lead)',\n         'Marcus Hale (Performance Lead)', 'Javier Monestel (Executive Assistant)'],\n  timezone: 'America/New_York',\n} }];\n"
+      },
+      "id": "d8c86fcc-35da-563d-ae73-483c2a104095",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Recording ready').first().json.body || {};\nconst lines = (body.transcript || []).map(u => `[${u.start}] ${u.speaker}: ${u.text}`).join('\\n');\nconst people = (body.participants || []).map(p => `${p.name}${p.organization ? ' [external, ' + p.organization + ']' : ''}`).join(', ');\nreturn [{ json: {\n  title: body.title || 'Untitled meeting',\n  date: body.date || new Date().toISOString().slice(0, 10),\n  recording_url: body.url || null,\n  prompt: `Meeting: ${body.title}\\nDate: ${body.date}\\nParticipants: ${people}\\nTeam: ${$('Config').first().json.team.join('; ')}\\n\\n${lines}`,\n} }];\n"
+      },
+      "id": "19cb57c9-92b1-52f9-80bc-3c1a5e37355d",
+      "name": "Build transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\"model\": \"claude-opus-5-5\", \"max_tokens\": 16000, \"system\": \"You extract follow-ups from a meeting transcript for a two-line health-tech startup (Clinical and Performance). Only real commitments; one item per commitment; owner = full participant name; resolve relative dates against the meeting date; destination: linear = engineering/product/growth work, attio = anything owed to a partner, customer, site or investor, notion = docs/playbooks/templates, calendar = a meeting to schedule. quote must be copied verbatim. Never invent anything.\", \"output_config\": {\"effort\": \"medium\", \"format\": {\"type\": \"json_schema\", \"schema\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"summary\", \"decisions\", \"open_questions\", \"action_items\"], \"properties\": {\"summary\": {\"type\": \"string\"}, \"decisions\": {\"type\": \"array\", \"items\": {\"type\": \"string\"} }, \"open_questions\": {\"type\": \"array\", \"items\": {\"type\": \"string\"} }, \"action_items\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"title\", \"owner\", \"due_date\", \"destination\", \"quote\"], \"properties\": {\"title\": {\"type\": \"string\"}, \"owner\": {\"type\": \"string\"}, \"due_date\": {\"type\": [\"string\", \"null\"]}, \"destination\": {\"type\": \"string\", \"enum\": [\"linear\", \"attio\", \"notion\", \"calendar\"]}, \"quote\": {\"type\": \"string\"} } } } } } } }, \"messages\": [{\"role\": \"user\", \"content\": JSON.stringify($json.prompt)}]} }}",
+        "options": {}
+      },
+      "id": "15f3727b-662f-597c-a658-a8bfad49cb48",
+      "name": "Claude: extract actions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Anthropic API key (x-api-key)"
+        }
+      },
+      "notes": "Claude (claude-opus-5-5). Credential: Header Auth with name x-api-key.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Claude returns content blocks (thinking + text). Keep only the text.\nconst res = $input.first().json;\nif (res.stop_reason === 'refusal') throw new Error('Model declined the request');\nconst text = (res.content || []).filter(b => b.type === 'text').map(b => b.text).join('\\n').trim();\n\nconst result = JSON.parse(text);\nconst meeting = $('Build transcript').first().json;\nconst transcript = meeting.prompt;\n// Grounding check: drop any item whose quote is not verbatim in the transcript.\nconst grounded = result.action_items.filter(i => transcript.includes(i.quote));\nconst dropped = result.action_items.length - grounded.length;\nreturn grounded.map(item => ({ json: { ...item, meeting: meeting.title, meeting_date: meeting.date, recording_url: meeting.recording_url, _summary: result.summary, _decisions: result.decisions, _dropped: dropped } }));\n"
+      },
+      "id": "24e8c9c8-8fc1-5d42-a8b1-114b61f1d87d",
+      "name": "Parse & validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ],
+      "notes": "Drops any item whose quote isn't found verbatim in the transcript.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().filter(i => i.json.destination === 'linear');\n"
+      },
+      "id": "62176d23-8db2-5ec0-9976-29143c193193",
+      "name": "Only Linear items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().filter(i => i.json.destination === 'attio');\n"
+      },
+      "id": "0875dec4-92a3-517d-af3c-1af16789ce43",
+      "name": "Only Attio items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().filter(i => ['notion', 'calendar'].includes(i.json.destination));\n"
+      },
+      "id": "f790dfaa-0bcb-51c1-a440-21f3aa3842e2",
+      "name": "Only Notion items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linear.app/graphql",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { query: 'mutation($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { identifier url } } }', variables: { input: { teamId: $('Config').first().json.linearTeamId, title: $json.title, description: '> ' + $json.quote + '\\n\\nFrom: ' + $json.meeting + ' · Owner: ' + $json.owner, dueDate: $json.due_date || undefined } } } }}",
+        "options": {}
+      },
+      "id": "e5117638-977f-5003-88fa-90ecbc6cfe2d",
+      "name": "Linear: create issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Linear API key (Authorization)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.attio.com/v2/tasks",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { data: { content: $json.title + ' (owner: ' + $json.owner + ', from ' + $json.meeting + ')', format: 'plaintext', deadline_at: $json.due_date ? $json.due_date + 'T17:00:00.000Z' : null, is_completed: false, linked_records: [], assignees: [] } } }}",
+        "options": {}
+      },
+      "id": "cd1eace6-09e9-5ba9-851c-8ec8d8e0b551",
+      "name": "Attio: create task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        180
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Attio API key (Authorization: Bearer)"
+        }
+      },
+      "notes": "Link to the partner's company record by adding linked_records once the record id is known.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { parent: { data_source_id: $('Config').first().json.notion.followUps }, properties: { 'Follow-up': { title: [ { text: { content: $json.title } } ] }, Status: { status: { name: 'Open' } }, Source: { select: { name: 'Meeting' } }, Due: $json.due_date ? { date: { start: $json.due_date } } : { date: null } } } }}",
+        "options": {}
+      },
+      "id": "30039284-d81d-56c7-a6b6-da6cd940f214",
+      "name": "Notion: add follow-up",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        360
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Notion integration token (Authorization: Bearer)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $('Parse & validate').all().map(i => i.json);\nif (!items.length) return [{ json: { text: 'No follow-ups found in this meeting.' } }];\nconst m = items[0];\nconst lines = items.map(i => `• *${i.title}* — ${i.owner}${i.due_date ? ' · due ' + i.due_date : ''} → ${i.destination}`);\nconst decisions = (m._decisions || []).map(d => `• ${d}`);\nconst text = [\n  `*${m.meeting}* (${m.meeting_date})`,\n  m._summary,\n  decisions.length ? '\\n*Decided*\\n' + decisions.join('\\n') : '',\n  '\\n*Follow-ups*\\n' + lines.join('\\n'),\n  m._dropped ? `\\n_${m._dropped} item(s) dropped: quote not found in transcript._` : '',\n  m.recording_url ? `\\n<${m.recording_url}|Recording>` : '',\n].filter(Boolean).join('\\n');\nreturn [{ json: { text } }];\n"
+      },
+      "id": "c9d68746-589a-538b-8087-ba3a812efe40",
+      "name": "Compose recap",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { channel: $('Config').first().json.slackChannel, text: $json.text, unfurl_links: false } }}",
+        "options": {}
+      },
+      "id": "60cadb69-d520-5f2c-8712-52f7ed671d82",
+      "name": "Slack: post recap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Slack bot token (Authorization: Bearer)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Recording ready": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Build transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build transcript": {
+      "main": [
+        [
+          {
+            "node": "Claude: extract actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude: extract actions": {
+      "main": [
+        [
+          {
+            "node": "Parse & validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & validate": {
+      "main": [
+        [
+          {
+            "node": "Only Linear items",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Only Attio items",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Only Notion items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only Linear items": {
+      "main": [
+        [
+          {
+            "node": "Linear: create issue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only Attio items": {
+      "main": [
+        [
+          {
+            "node": "Attio: create task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only Notion items": {
+      "main": [
+        [
+          {
+            "node": "Notion: add follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Linear: create issue": {
+      "main": [
+        [
+          {
+            "node": "Compose recap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attio: create task": {
+      "main": [
+        [
+          {
+            "node": "Compose recap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notion: add follow-up": {
+      "main": [
+        [
+          {
+            "node": "Compose recap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose recap": {
+      "main": [
+        [
+          {
+            "node": "Slack: post recap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
